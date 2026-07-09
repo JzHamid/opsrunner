@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getApprovedTask, type ApprovedTask } from "@/lib/workflows";
+import { formatTaskOutput } from "@/lib/task-output";
 
 type NormalizedTaskResponse = {
   ok: true;
@@ -11,6 +12,7 @@ type NormalizedTaskResponse = {
   runId?: string;
   source?: string;
   workflowStatus?: string;
+  resultItems?: string[];
   data?: unknown;
 };
 
@@ -113,60 +115,80 @@ function normalizeStatus(value: string | undefined, isFallback: boolean) {
 function normalizeN8nResponse(
   data: unknown,
   task: ApprovedTask,
-): NormalizedTaskResponse {
+  input: string,
+): NormalizedTaskResponse | null {
   const now = new Date().toISOString();
 
   if (isRecord(data)) {
+    if (data.ok === false) {
+      return null;
+    }
+
     const isFallback = isFallbackResponse(data);
     const statusValue = pickString(data, [
       "workflow_status",
       "workflowStatus",
       "status",
     ]);
+    const responseTitle = pickString(data, ["title", "resultTitle", "heading"]);
+    const responseBody = pickString(data, [
+      "body",
+      "result",
+      "message",
+      "summary",
+      "output",
+    ]);
+
+    if (!responseTitle && !responseBody) {
+      return null;
+    }
+
+    const formattedOutput = formatTaskOutput(task, input);
 
     return {
       ok: true,
       title:
-        pickString(data, ["title", "resultTitle", "heading"]) ??
-        (isFallback ? "Safe fallback prepared" : `${task.name} complete`),
+        isFallback
+          ? (responseTitle ?? "Fallback Result")
+          : formattedOutput.title,
       body:
-        pickString(data, ["body", "result", "message", "summary", "output"]) ??
-        (isFallback
-          ? "The workflow used its fallback path and returned a usable result."
-          : "The task finished successfully."),
+        isFallback
+          ? (responseBody ?? "A safe fallback result was returned.")
+          : formattedOutput.body,
       nextSteps:
-        pickStringList(data, ["next_steps", "nextSteps", "actions"]) ??
-        ["Review the result before sharing it.", "Run again if the input changes."],
+        isFallback
+          ? (pickStringList(data, ["next_steps", "nextSteps", "actions"]) ?? [
+              "Review the output.",
+              "Run again later if needed.",
+            ])
+          : formattedOutput.nextSteps,
       status: normalizeStatus(statusValue, isFallback),
       processedAt:
         pickString(data, ["processed_at", "processedAt", "submittedAt"]) ?? now,
       runId: pickString(data, ["runId", "executionId", "id"]),
       source: pickString(data, ["source"]),
       workflowStatus: statusValue,
+      resultItems: isFallback ? undefined : formattedOutput.resultItems,
       data,
     };
   }
 
   if (typeof data === "string" && data.trim()) {
+    const formattedOutput = formatTaskOutput(task, input);
+
     return {
       ok: true,
-      title: `${task.name} complete`,
-      body: data.trim().slice(0, 1_200),
-      nextSteps: ["Review the result before sharing it."],
+      title: formattedOutput.title,
+      body: formattedOutput.body,
+      nextSteps: formattedOutput.nextSteps,
       status: "Complete",
       processedAt: now,
+      resultItems: formattedOutput.resultItems,
       data: { text: data.trim() },
     };
   }
 
-  return {
-    ok: true,
-    title: `${task.name} complete`,
-    body: "The task finished successfully.",
-    nextSteps: ["Review the result before sharing it."],
-    status: "Complete",
-    processedAt: now,
-  };
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -301,5 +323,18 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json(normalizeN8nResponse(responseData, task));
+  const normalizedResponse = normalizeN8nResponse(responseData, task, input);
+
+  if (!normalizedResponse) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "request_failed",
+        error: "The workflow did not return a usable result.",
+      },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json(normalizedResponse);
 }

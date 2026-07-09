@@ -17,6 +17,7 @@ type TaskSuccessResult = {
   runId?: string;
   source?: string;
   workflowStatus?: string;
+  resultItems?: string[];
   data?: unknown;
 };
 
@@ -316,26 +317,41 @@ export default function Home() {
                 ) : null}
               </div>
 
-              <p className="mt-3 text-sm leading-6 opacity-80">
+              <p className="mt-3 whitespace-pre-line text-sm leading-6 opacity-80">
                 {resultShell.body}
               </p>
 
               {result?.ok ? (
-                <div className="mt-5 grid gap-4 border-t border-current/10 pt-5 sm:grid-cols-[1fr_auto]">
-                  <div>
+                <div className="mt-5 space-y-5 border-t border-current/10 pt-5">
+                  {result.resultItems?.length ? (
+                    <ol className="space-y-3">
+                      {result.resultItems.map((item, index) => (
+                        <li key={`${item}-${index}`} className="flex gap-3 text-sm leading-6 opacity-85">
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-current/20 text-xs font-semibold opacity-75">
+                            {index + 1}
+                          </span>
+                          <span className="pt-px">{item}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+
+                  <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                    <div>
                     <p className="text-sm font-semibold">Next steps</p>
                     <ul className="mt-2 space-y-2 text-sm leading-6 opacity-80">
-                      {result.nextSteps.map((step) => (
-                        <li key={step} className="flex gap-2">
+                        {result.nextSteps.map((step, index) => (
+                          <li key={`${step}-${index}`} className="flex gap-2">
                           <span className="mt-2 size-1.5 shrink-0 rounded-full bg-current opacity-50" />
                           <span>{step}</span>
                         </li>
-                      ))}
+                        ))}
                     </ul>
-                  </div>
-                  <div className="text-sm opacity-80 sm:text-right">
-                    <p className="font-semibold">Processed</p>
-                    <p className="mt-1 font-mono text-xs">{result.processedAt}</p>
+                    </div>
+                    <div className="text-sm opacity-80 sm:text-right">
+                      <p className="font-semibold">Processed</p>
+                      <p className="mt-1 font-mono text-xs">{result.processedAt}</p>
+                    </div>
                   </div>
                 </div>
               ) : null}
