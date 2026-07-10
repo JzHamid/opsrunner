@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f2ec;
+  --background: #f3f6f3;
   --foreground: #111816;
-  --surface: #fffefa;
+  --surface: #ffffff;
   --surface-muted: #eef3ef;
-  --muted: #5f6b66;
-  --line: #d9dfd8;
+  --muted: #58655f;
+  --line: #dce3de;
   --accent: #1b7553;
   --accent-foreground: #ffffff;
   --danger: #b42318;
@@ -31,11 +31,11 @@
 }
 
 body {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.78), transparent 42%),
-    linear-gradient(180deg, #f7f5ef 0%, var(--background) 48%, #ecefe9 100%);
+  min-width: 320px;
+  background: var(--background);
   color: var(--foreground);
   font-family: "Geist", "Geist Fallback", Arial, Helvetica, sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
 button,
