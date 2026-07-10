@@ -38,6 +38,9 @@ Implement one checkpoint at a time. Do not combine checkpoints without explicit 
 - Add Supabase packages and browser/server clients.
 - Add the tenancy migration, RLS policies, seed data, and generated types.
 - Do not add authentication screens or protect routes yet.
+- Limit the schema to profiles, organizations, and organization memberships.
+- Keep profiles self-only and do not expose an organization member directory.
+- Do not add `proxy.ts`, service-role handling, or authorization via `getSession()`.
 
 ### Phase 1C - Authentication
 - Add invite-only magic-link authentication.

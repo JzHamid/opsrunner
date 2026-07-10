@@ -1,0 +1,4 @@
+-- Phase 1B intentionally has no static seed rows.
+-- Auth users and memberships are created transactionally inside database tests.
+-- For manual local use, invite a disposable local user and call
+-- public.create_organization(name, slug) while authenticated.
