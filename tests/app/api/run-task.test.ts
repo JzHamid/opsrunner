@@ -268,13 +268,13 @@ describe("POST /api/run-task n8n execution", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("normalizes a successful n8n response without changing deterministic output", async () => {
+  it("preserves successful n8n content as the source of truth", async () => {
     const n8nResponse = {
       ok: true,
       task_type: "summarize_notes",
       title: "Workflow title",
       result: "Workflow body",
-      next_steps: ["Workflow next step"],
+      next_steps: ["Workflow next step", " ", 42],
       source: "n8n",
       workflow_status: "completed",
       processed_at: "2026-07-10T10:00:00.000Z",
@@ -288,18 +288,125 @@ describe("POST /api/run-task n8n execution", () => {
     expect(response.status).toBe(200);
     expect(result).toEqual({
       ok: true,
-      title: "Notes Summary",
-      body: "Approval was received for scope. The team will deliver Friday.",
-      nextSteps: [
-        "Confirm the owner and due date.",
-        "Share the agreed actions.",
-      ],
+      taskType: "summarize_notes",
+      title: "Workflow title",
+      body: "Workflow body",
+      nextSteps: ["Workflow next step"],
       status: "Completed",
       processedAt: "2026-07-10T10:00:00.000Z",
       runId: "run-123",
       source: "n8n",
       workflowStatus: "completed",
       data: n8nResponse,
+    });
+  });
+
+  it("preserves improved checklist content and structured items", async () => {
+    const n8nResponse = {
+      ok: true,
+      task_type: "generate_checklist",
+      title: "Launch Checklist",
+      result: [
+        "1. Finalize the landing page design.",
+        "2. Run QA tests on the mobile app.",
+        "3. Confirm influencer contracts.",
+      ].join("\n"),
+      result_items: [
+        "Finalize the landing page design.",
+        "Run QA tests on the mobile app.",
+        "Confirm influencer contracts.",
+      ],
+      next_steps: ["Assign an owner and due date to each item."],
+      source: "n8n",
+      workflow_status: "completed",
+      processed_at: "2026-07-10T10:00:00.000Z",
+    };
+    fetchMock.mockResolvedValue(createN8nResponse(n8nResponse));
+
+    const response = await POST(
+      createTaskRequest({ taskType: "generate_checklist" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await readJson(response)).toMatchObject({
+      ok: true,
+      taskType: "generate_checklist",
+      title: "Launch Checklist",
+      body: n8nResponse.result,
+      resultItems: n8nResponse.result_items,
+      nextSteps: n8nResponse.next_steps,
+    });
+  });
+
+  it("does not shorten an n8n-generated client update", async () => {
+    const clientUpdate = [
+      "Hello,",
+      "",
+      "Project Alpha continues to progress smoothly. Sprint 5 is complete, QA begins next week, risks remain low, and the project remains within budget.",
+      "",
+      "The Beta release remains scheduled for August 1.",
+      "",
+      "Best,",
+    ].join("\n");
+    fetchMock.mockResolvedValue(
+      createN8nResponse({
+        ok: true,
+        task_type: "format_client_update",
+        title: "Client Update",
+        result: clientUpdate,
+        next_steps: ["Review names and dates before sending."],
+        source: "n8n",
+        workflow_status: "completed",
+        processed_at: "2026-07-10T10:00:00.000Z",
+      }),
+    );
+
+    const response = await POST(
+      createTaskRequest({ taskType: "format_client_update" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await readJson(response)).toMatchObject({
+      taskType: "format_client_update",
+      title: "Client Update",
+      body: clientUpdate,
+      nextSteps: ["Review names and dates before sending."],
+    });
+  });
+
+  it("does not regenerate an n8n-generated follow-up draft", async () => {
+    const followUp = [
+      "Hello,",
+      "",
+      "Thank you for your time yesterday and for sharing your feedback.",
+      "",
+      "We will send the revised proposal by Friday.",
+      "",
+      "Best,",
+    ].join("\n");
+    fetchMock.mockResolvedValue(
+      createN8nResponse({
+        ok: true,
+        task_type: "create_followup_draft",
+        title: "Follow-up Draft",
+        result: followUp,
+        next_steps: ["Add the recipient name and sender sign-off."],
+        source: "n8n",
+        workflow_status: "completed",
+        processed_at: "2026-07-10T10:00:00.000Z",
+      }),
+    );
+
+    const response = await POST(
+      createTaskRequest({ taskType: "create_followup_draft" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await readJson(response)).toMatchObject({
+      taskType: "create_followup_draft",
+      title: "Follow-up Draft",
+      body: followUp,
+      nextSteps: ["Add the recipient name and sender sign-off."],
     });
   });
 
@@ -322,6 +429,7 @@ describe("POST /api/run-task n8n execution", () => {
     expect(response.status).toBe(200);
     expect(await readJson(response)).toEqual({
       ok: true,
+      taskType: "summarize_notes",
       title: "Fallback Result",
       body: "A safe structured fallback result.",
       nextSteps: ["Review the output", "Run again later if needed"],
@@ -330,6 +438,72 @@ describe("POST /api/run-task n8n execution", () => {
       source: "n8n-fallback",
       workflowStatus: "fallback",
       data: fallbackResponse,
+    });
+  });
+
+  it("uses emergency local content for an incomplete successful fallback", async () => {
+    const fallbackResponse = {
+      ok: true,
+      task_type: "summarize_notes",
+      source: "n8n-fallback",
+      workflow_status: "fallback",
+      processed_at: "2026-07-10T10:00:00.000Z",
+    };
+    fetchMock.mockResolvedValue(createN8nResponse(fallbackResponse));
+
+    const response = await POST(createTaskRequest());
+
+    expect(response.status).toBe(200);
+    expect(await readJson(response)).toEqual({
+      ok: true,
+      taskType: "summarize_notes",
+      title: "Fallback Result",
+      body: "A safe structured fallback result.",
+      nextSteps: ["Review the output", "Run again later if needed"],
+      status: "Safe fallback",
+      processedAt: "2026-07-10T10:00:00.000Z",
+      source: "n8n-fallback",
+      workflowStatus: "fallback",
+      data: fallbackResponse,
+    });
+  });
+
+  it("fails safely when a successful structured response has no usable result", async () => {
+    fetchMock.mockResolvedValue(
+      createN8nResponse({
+        ok: true,
+        task_type: "summarize_notes",
+        title: "Missing result",
+        next_steps: [],
+        source: "n8n",
+        workflow_status: "completed",
+      }),
+    );
+
+    const response = await POST(createTaskRequest());
+
+    expect(response.status).toBe(502);
+    expect(await readJson(response)).toEqual({
+      ok: false,
+      code: "request_failed",
+      error: "The workflow did not return a usable result.",
+    });
+  });
+
+  it("fails safely when n8n returns a plain-text response", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("Unstructured workflow output", {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+
+    const response = await POST(createTaskRequest());
+
+    expect(response.status).toBe(502);
+    expect(await readJson(response)).toMatchObject({
+      ok: false,
+      code: "request_failed",
     });
   });
 

@@ -136,9 +136,11 @@ Successful n8n response:
 }
 ```
 
-The API route normalizes n8n fields for the interface and applies deterministic
-task-specific presentation formatting. Empty responses, `ok: false`, and
-non-successful HTTP responses are returned as request failures.
+The API route normalizes n8n fields for the interface while preserving the
+workflow-generated title, result, next steps, and checklist structure. Local
+content is used only when a successful fallback response is incomplete. Empty
+or malformed responses, `ok: false`, and non-successful HTTP responses are
+returned as request failures.
 
 ## Environment Variables
 

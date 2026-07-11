@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireOrganizationMembership } from "@/lib/organizations/require-membership";
 import { createClient } from "@/lib/supabase/server";
-import { formatTaskOutput } from "@/lib/task-output";
+import { getEmergencyFallbackContent } from "@/lib/task-output";
 import { getApprovedTaskByType, type ApprovedTask } from "@/lib/workflows";
 
 type NormalizedTaskResponse = {
   ok: true;
+  taskType: string;
   title: string;
   body: string;
   nextSteps: string[];
@@ -51,17 +52,14 @@ function pickStringList(record: Record<string, unknown>, keys: string[]) {
         .map((item) => item.trim())
         .filter(Boolean);
 
-      if (items.length > 0) {
-        return items.slice(0, 4);
-      }
+      return items;
     }
 
     if (typeof value === "string" && value.trim()) {
       return value
         .split(/\r?\n/)
         .map((item) => item.replace(/^[-*]\s*/, "").trim())
-        .filter(Boolean)
-        .slice(0, 4);
+        .filter(Boolean);
     }
   }
 
@@ -117,80 +115,68 @@ function normalizeStatus(value: string | undefined, isFallback: boolean) {
 function normalizeN8nResponse(
   data: unknown,
   task: ApprovedTask,
-  input: string,
 ): NormalizedTaskResponse | null {
   const now = new Date().toISOString();
 
-  if (isRecord(data)) {
-    if (data.ok === false) {
-      return null;
-    }
-
-    const isFallback = isFallbackResponse(data);
-    const statusValue = pickString(data, [
-      "workflow_status",
-      "workflowStatus",
-      "status",
-    ]);
-    const responseTitle = pickString(data, ["title", "resultTitle", "heading"]);
-    const responseBody = pickString(data, [
-      "body",
-      "result",
-      "message",
-      "summary",
-      "output",
-    ]);
-
-    if (!responseTitle && !responseBody) {
-      return null;
-    }
-
-    const formattedOutput = formatTaskOutput(task, input);
-
-    return {
-      ok: true,
-      title:
-        isFallback
-          ? (responseTitle ?? "Fallback Result")
-          : formattedOutput.title,
-      body:
-        isFallback
-          ? (responseBody ?? "A safe fallback result was returned.")
-          : formattedOutput.body,
-      nextSteps:
-        isFallback
-          ? (pickStringList(data, ["next_steps", "nextSteps", "actions"]) ?? [
-              "Review the output.",
-              "Run again later if needed.",
-            ])
-          : formattedOutput.nextSteps,
-      status: normalizeStatus(statusValue, isFallback),
-      processedAt:
-        pickString(data, ["processed_at", "processedAt", "submittedAt"]) ?? now,
-      runId: pickString(data, ["runId", "executionId", "id"]),
-      source: pickString(data, ["source"]),
-      workflowStatus: statusValue,
-      resultItems: isFallback ? undefined : formattedOutput.resultItems,
-      data,
-    };
+  if (!isRecord(data) || data.ok !== true) {
+    return null;
   }
 
-  if (typeof data === "string" && data.trim()) {
-    const formattedOutput = formatTaskOutput(task, input);
+  const isFallback = isFallbackResponse(data);
+  const statusValue = pickString(data, [
+    "workflow_status",
+    "workflowStatus",
+    "status",
+  ]);
+  const responseTitle = pickString(data, ["title", "resultTitle", "heading"]);
+  const responseBody = pickString(data, [
+    "body",
+    "result",
+    "message",
+    "summary",
+    "output",
+  ]);
+  const responseNextSteps = pickStringList(data, [
+    "next_steps",
+    "nextSteps",
+    "actions",
+  ]);
+  const responseResultItems = pickStringList(data, [
+    "result_items",
+    "resultItems",
+    "checklist_items",
+    "checklistItems",
+  ]);
+  const fallbackContent = getEmergencyFallbackContent();
 
-    return {
-      ok: true,
-      title: formattedOutput.title,
-      body: formattedOutput.body,
-      nextSteps: formattedOutput.nextSteps,
-      status: "Complete",
-      processedAt: now,
-      resultItems: formattedOutput.resultItems,
-      data: { text: data.trim() },
-    };
+  if (!isFallback && (!responseTitle || !responseBody)) {
+    return null;
   }
 
-  return null;
+  return {
+    ok: true,
+    taskType: pickString(data, ["task_type", "taskType"]) ?? task.taskType,
+    title: isFallback
+      ? (responseTitle ?? fallbackContent.title)
+      : responseTitle!,
+    body: isFallback ? (responseBody ?? fallbackContent.body) : responseBody!,
+    nextSteps: isFallback
+      ? responseNextSteps?.length
+        ? responseNextSteps
+        : fallbackContent.nextSteps
+      : (responseNextSteps ?? []),
+    status: normalizeStatus(statusValue, isFallback),
+    processedAt:
+      pickString(data, ["processed_at", "processedAt", "submittedAt"]) ?? now,
+    runId: pickString(data, ["runId", "executionId", "id"]),
+    source: pickString(data, ["source"]),
+    workflowStatus: statusValue,
+    resultItems:
+      !isFallback && responseResultItems?.length
+        ? responseResultItems
+        : undefined,
+    data,
+  };
 }
 
 export async function POST(request: Request) {
@@ -375,7 +361,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const normalizedResponse = normalizeN8nResponse(responseData, task, input);
+  const normalizedResponse = normalizeN8nResponse(responseData, task);
 
   if (!normalizedResponse) {
     return NextResponse.json(

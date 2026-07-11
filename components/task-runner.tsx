@@ -9,6 +9,7 @@ import {
 
 type TaskSuccessResult = {
   ok: true;
+  taskType: string;
   title: string;
   body: string;
   nextSteps: string[];
