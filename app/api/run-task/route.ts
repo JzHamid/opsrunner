@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { getApprovedTask, type ApprovedTask } from "@/lib/workflows";
+import { requireOrganizationMembership } from "@/lib/organizations/require-membership";
+import { createClient } from "@/lib/supabase/server";
 import { formatTaskOutput } from "@/lib/task-output";
+import { getApprovedTaskByType, type ApprovedTask } from "@/lib/workflows";
 
 type NormalizedTaskResponse = {
   ok: true;
@@ -218,8 +220,53 @@ export async function POST(request: Request) {
     );
   }
 
-  const taskId = typeof body.taskId === "string" ? body.taskId.trim() : "";
-  const task = getApprovedTask(taskId);
+  const organizationSlug =
+    typeof body.organization_slug === "string"
+      ? body.organization_slug.trim()
+      : "";
+
+  if (!organizationSlug) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "invalid_request",
+        error: "Choose a valid workspace.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const supabase = await createClient();
+  const membership = await requireOrganizationMembership(
+    supabase,
+    organizationSlug,
+  );
+
+  if (membership.kind === "unauthenticated") {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "unauthorized",
+        error: "Sign in to run this task.",
+      },
+      { status: 401 },
+    );
+  }
+
+  if (membership.kind === "not-found") {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "forbidden",
+        error: "This workspace is unavailable.",
+      },
+      { status: 404 },
+    );
+  }
+
+  const taskType =
+    typeof body.task_type === "string" ? body.task_type.trim() : "";
+  const task = getApprovedTaskByType(taskType);
 
   if (!task) {
     return NextResponse.json(
@@ -232,10 +279,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const payload = isRecord(body.payload) ? body.payload : {};
-  const input = typeof payload.input === "string" ? payload.input.trim() : "";
+  const input = typeof body.input === "string" ? body.input.trim() : "";
   const reference =
-    typeof payload.reference === "string" ? payload.reference.trim() : "";
+    typeof body.reference === "string" ? body.reference.trim() : "";
 
   if (!input) {
     return NextResponse.json(
@@ -271,32 +317,38 @@ export async function POST(request: Request) {
   }
 
   const webhookUrl = process.env.N8N_OPSRUNNER_WEBHOOK_URL;
+  const webhookSecret = process.env.N8N_OPSRUNNER_WEBHOOK_SECRET;
 
-  if (!webhookUrl) {
+  if (!webhookUrl || !webhookSecret) {
     return NextResponse.json(
       {
         ok: false,
         code: "not_configured",
-        error: "Add the n8n webhook URL on the server to enable task runs.",
+        error: "Complete the server workflow configuration to enable task runs.",
       },
       { status: 503 },
     );
   }
 
   let n8nResponse: Response;
+  const requestedAt = new Date().toISOString();
 
   try {
     n8nResponse = await fetch(webhookUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        "X-OpsRunner-Secret": webhookSecret,
       },
       body: JSON.stringify({
         task_type: task.taskType,
         input,
-        source: "opsrunner-web",
         reference: reference || null,
-        submittedAt: new Date().toISOString(),
+        source: "opsrunner-web",
+        organization_id: membership.context.organization.id,
+        organization_slug: membership.context.organization.slug,
+        user_id: membership.context.userId,
+        requested_at: requestedAt,
       }),
     });
   } catch {

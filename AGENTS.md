@@ -113,6 +113,21 @@ Avoid:
 - Protect `/api/run-task` with a verified user and active organization membership.
 - Add n8n webhook secret validation without changing the webhook path or response contract.
 
+## Phase 1D Authorization Rules
+
+- Resolve `/` to the authenticated user's first active organization at
+  `/org/[organizationSlug]/run`.
+- Reauthorize organization routes in Server Components through verified claims,
+  RLS, and an active membership. Do not rely on proxy authorization alone.
+- Treat client-supplied organization slugs only as lookup hints. Derive trusted
+  organization IDs and user IDs on the server.
+- Authorize `/api/run-task` inside the route handler because `/api/*` remains
+  excluded from proxy redirects.
+- Send `X-OpsRunner-Secret` to n8n from
+  `N8N_OPSRUNNER_WEBHOOK_SECRET`. Never expose or log that secret.
+- Return the same not-found behavior for unknown, inactive, and
+  cross-organization route access so organization existence is not disclosed.
+
 ## Architecture Decisions
 
 - Use organization-scoped memberships and roles.
@@ -120,6 +135,7 @@ Avoid:
 - Use `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for Supabase.
 - Use `APP_URL` only on the server for authentication email redirects.
 - Keep `N8N_OPSRUNNER_WEBHOOK_URL` server-side.
+- Keep `N8N_OPSRUNNER_WEBHOOK_SECRET` server-side.
 - Do not add a Supabase secret key or service-role key.
 - Preserve the current task types, `/api/run-task`, n8n contract, fallback handling, and deterministic output behavior.
 - Preserve the current runner UI until a redesign is explicitly approved.
@@ -150,6 +166,7 @@ The UI should feel like a real product, not a tutorial, not a template, and not 
 
 ## Security Rules
 - Never expose n8n webhook URLs on the client.
+- Never expose the n8n webhook authentication secret on the client.
 - Use server-side API routes for webhook calls.
 - Store webhook URLs in environment variables.
 - Never create users from the public magic-link login flow.

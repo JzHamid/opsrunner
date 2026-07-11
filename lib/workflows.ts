@@ -44,5 +44,9 @@ export function getApprovedTask(taskId: string) {
   return approvedTasks.find((task) => task.id === taskId);
 }
 
+export function getApprovedTaskByType(taskType: string) {
+  return approvedTasks.find((task) => task.taskType === taskType);
+}
+
 export const approvedWorkflows = approvedTasks;
 export const getApprovedWorkflow = getApprovedTask;

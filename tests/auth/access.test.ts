@@ -1,85 +1,70 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { getFirstActiveMembershipMock } = vi.hoisted(() => ({
+  getFirstActiveMembershipMock: vi.fn(),
+}));
+
+vi.mock("@/lib/organizations/get-first-membership", () => ({
+  getFirstActiveMembership: getFirstActiveMembershipMock,
+}));
+
 import {
   getAuthAccess,
   getAuthRedirect,
   type AuthAccess,
 } from "@/lib/auth/access";
-import type { Database } from "@/lib/supabase/database.types";
 
-function createSupabaseClient({
-  userId,
-  hasMembership,
-  membershipError = null,
-}: {
-  userId?: string;
-  hasMembership?: boolean;
-  membershipError?: unknown;
-}) {
-  const maybeSingle = vi.fn().mockResolvedValue({
-    data: hasMembership ? { id: "membership-1" } : null,
-    error: membershipError,
-  });
-  const query = {
-    eq: vi.fn(),
-    limit: vi.fn(),
-    maybeSingle,
-  };
-
-  query.eq.mockReturnValue(query);
-  query.limit.mockReturnValue(query);
-
-  return {
-    auth: {
-      getClaims: vi.fn().mockResolvedValue({
-        data: { claims: userId ? { sub: userId } : null },
-        error: null,
-      }),
-    },
-    from: vi.fn().mockReturnValue({
-      select: vi.fn().mockReturnValue(query),
-    }),
-  } as unknown as Parameters<typeof getAuthAccess>[0] & {
-    __database?: Database;
-  };
-}
+beforeEach(() => {
+  getFirstActiveMembershipMock.mockReset();
+});
 
 describe("getAuthAccess", () => {
   it("treats missing verified claims as unauthenticated", async () => {
-    const access = await getAuthAccess(createSupabaseClient({}));
+    getFirstActiveMembershipMock.mockResolvedValue({
+      kind: "unauthenticated",
+    });
+
+    const access = await getAuthAccess({} as Parameters<typeof getAuthAccess>[0]);
 
     expect(access).toEqual({ kind: "unauthenticated" });
   });
 
-  it("recognizes an active membership returned through RLS", async () => {
-    const access = await getAuthAccess(
-      createSupabaseClient({ userId: "user-1", hasMembership: true }),
-    );
+  it("includes the first active organization slug", async () => {
+    getFirstActiveMembershipMock.mockResolvedValue({
+      kind: "active-member",
+      context: {
+        userId: "user-1",
+        organization: { slug: "ops-workspace" },
+      },
+    });
 
-    expect(access).toEqual({ kind: "active-member", userId: "user-1" });
+    const access = await getAuthAccess({} as Parameters<typeof getAuthAccess>[0]);
+
+    expect(access).toEqual({
+      kind: "active-member",
+      userId: "user-1",
+      organizationSlug: "ops-workspace",
+    });
   });
 
   it("fails closed when no active membership is available", async () => {
-    const access = await getAuthAccess(
-      createSupabaseClient({ userId: "user-1", hasMembership: false }),
-    );
+    getFirstActiveMembershipMock.mockResolvedValue({
+      kind: "no-access",
+      userId: "user-1",
+    });
 
-    expect(access).toEqual({ kind: "no-access", userId: "user-1" });
-  });
-
-  it("fails closed when the membership query fails", async () => {
-    const access = await getAuthAccess(
-      createSupabaseClient({
-        userId: "user-1",
-        membershipError: new Error("Database unavailable"),
-      }),
-    );
+    const access = await getAuthAccess({} as Parameters<typeof getAuthAccess>[0]);
 
     expect(access).toEqual({ kind: "no-access", userId: "user-1" });
   });
 });
 
 describe("getAuthRedirect", () => {
-  const activeMember: AuthAccess = { kind: "active-member", userId: "user-1" };
+  const activeMember: AuthAccess = {
+    kind: "active-member",
+    userId: "user-1",
+    organizationSlug: "ops workspace",
+  };
   const noAccess: AuthAccess = { kind: "no-access", userId: "user-1" };
   const unauthenticated: AuthAccess = { kind: "unauthenticated" };
 
@@ -87,8 +72,8 @@ describe("getAuthRedirect", () => {
     ["/", unauthenticated, "/login"],
     ["/no-access", unauthenticated, "/login"],
     ["/login", unauthenticated, null],
-    ["/login", activeMember, "/"],
-    ["/no-access", activeMember, "/"],
+    ["/login", activeMember, "/org/ops%20workspace/run"],
+    ["/no-access", activeMember, "/org/ops%20workspace/run"],
     ["/", noAccess, "/no-access"],
     ["/login", noAccess, "/no-access"],
     ["/no-access", noAccess, null],
