@@ -55,8 +55,21 @@ The roles are `owner`, `admin`, `operator`, and `viewer`. Membership status is
 `invited`, `active`, or `suspended`. RLS denies anonymous table access and
 isolates organization reads through active memberships.
 
-Authentication UI, session refresh, protected routes, and the organization
-application shell are intentionally deferred to Phases 1C and 1D.
+Authentication, session refresh, and protected page access are implemented in
+Phase 1C. The organization application shell and `/api/run-task` protection
+remain deferred to Phase 1D.
+
+## Authentication
+
+OpsRunner uses invite-only magic-link authentication. The public login form
+never creates users and always returns a neutral confirmation message.
+
+Page access is handled through a Supabase SSR proxy:
+
+- Unauthenticated users are sent to `/login`.
+- Active organization members can use the runner at `/`.
+- Authenticated users without an active membership are sent to `/no-access`.
+- `/api/*` remains unchanged until Phase 1D, including `/api/run-task`.
 
 ## n8n Workflow Contract
 
@@ -103,13 +116,15 @@ non-successful HTTP responses are returned as request failures.
 Create `.env.local` from `.env.example` and set:
 
 ```bash
+APP_URL=http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 N8N_OPSRUNNER_WEBHOOK_URL=
 ```
 
-The Supabase URL and publishable key are browser-safe project identifiers used
-with RLS. Do not add a Supabase secret or service-role key.
+`APP_URL` is server-only and must match the Supabase Site URL. The Supabase URL
+and publishable key are browser-safe project identifiers used with RLS. Do not
+add a Supabase secret or service-role key.
 
 Use the production webhook URL for the published `OpsRunner Task Router`
 workflow. Restart the development server after changing environment variables.
@@ -122,7 +137,8 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000), select a task, enter the
-required context, and choose `Run task`.
+required context, and choose `Run task` after signing in with an invited
+account.
 
 ## Local Supabase Setup
 
@@ -148,6 +164,31 @@ npx supabase db push
 
 Before pushing, review the migration and confirm the linked project is the
 intended non-production or production environment.
+
+## Supabase Dashboard Configuration
+
+1. In Authentication settings, keep email signups disabled.
+2. Set the Site URL to the production value of `APP_URL`.
+3. Add exact local and production `/auth/confirm` URLs to the redirect allow
+   list.
+4. Set the Magic Link email template to:
+
+   ```text
+   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email
+   ```
+
+5. Set the Invite User email template to:
+
+   ```text
+   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite
+   ```
+
+6. Invite-only provisioning order:
+   - An operator invites the user through Supabase Dashboard.
+   - Supabase creates the Auth user.
+   - The operator copies that user UUID.
+   - The operator creates an active organization membership for that UUID.
+   - The user accepts the invite or signs in with a magic link.
 
 ## Database Types
 
@@ -193,8 +234,8 @@ OpsRunner is ready for a standard Next.js deployment on Vercel:
 
 1. Connect the repository to a Vercel project.
 2. Create or select the intended Supabase project and apply migrations.
-3. Add the two public Supabase variables and `N8N_OPSRUNNER_WEBHOOK_URL` to the
-   required Vercel environments.
+3. Add `APP_URL`, the two public Supabase variables, and
+   `N8N_OPSRUNNER_WEBHOOK_URL` to the required Vercel environments.
 4. Confirm the n8n workflow is published and its production webhook is active.
 5. Deploy and run all four task types against the production app.
 
@@ -207,9 +248,11 @@ configuration.
 - The n8n webhook URL is read only by the server-side API route.
 - Do not prefix the webhook variable with `NEXT_PUBLIC_`.
 - No Supabase secret or service-role key is used by the application.
+- `APP_URL` remains server-only and is never prefixed with `NEXT_PUBLIC_`.
 - Anonymous users have no grants on the Phase 1B application tables.
 - Organization authorization comes from current membership rows, not user
   metadata or JWT role claims.
+- Magic-link confirmation accepts only `email` and `invite` token types.
 - Do not commit `.env.local`.
 - Only approved task IDs are accepted by the API route.
 - Request fields and input lengths are validated before the webhook call.

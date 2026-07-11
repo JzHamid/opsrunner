@@ -42,12 +42,70 @@ Implement one checkpoint at a time. Do not combine checkpoints without explicit 
 - Keep profiles self-only and do not expose an organization member directory.
 - Do not add `proxy.ts`, service-role handling, or authorization via `getSession()`.
 
-### Phase 1C - Authentication
-- Add invite-only magic-link authentication.
-- Add session refresh, login, confirmation, sign-out, and no-access handling.
-- Public login must use `shouldCreateUser: false` and must not create users.
-- Verify token hashes through `/auth/confirm`; do not use a generic `/auth/callback` route.
-- Send authenticated users without an active membership to `/no-access`.
+## Phase 1C Authentication Scope
+
+Phase 1C adds invite-only authentication and secure session handling.
+
+Build only:
+
+- Supabase SSR session refresh
+- invite-only magic-link login
+- authentication confirmation
+- sign-out
+- verified user helpers
+- authenticated and unauthenticated route handling
+- no-access state
+- authentication tests
+
+Do not add:
+
+- public signup
+- password signup
+- organization management UI
+- application sidebar
+- route movement for the task runner
+- requests, tasks, approvals, or clients
+- AI providers
+- n8n workflow changes
+
+## Authentication Rules
+
+- Authentication is invite-only.
+- Public login must not create new users.
+- Use `shouldCreateUser: false`.
+- Use magic-link authentication.
+- Use `/auth/confirm` for token-hash verification.
+- Use `@supabase/ssr` for browser and server clients.
+- Use `proxy.ts` for cookie/session refresh.
+- Use `getClaims()` for verified identity checks.
+- Do not trust `getSession()` for authorization.
+- Create Supabase clients per request on the server.
+- Do not store server clients in module-level state.
+- Do not add a service-role or secret key.
+- Do not authorize from user metadata.
+- Authenticated users without an active organization membership must go to `/no-access`.
+- Avoid redirect loops between `/`, `/login`, and `/no-access`.
+
+## Authentication UI Rules
+
+Keep authentication screens sleek and low cognitive load.
+
+Prefer:
+
+- one focused form
+- short supporting copy
+- clear success and error states
+- calm product styling
+- no marketing-heavy landing page
+- no dense card layouts
+
+Avoid:
+
+- public signup language
+- excessive instructions
+- social login buttons unless explicitly added later
+- unnecessary navigation
+- crowded layouts
 
 ### Phase 1D - Protected Workspace
 - Add the organization-aware application shell.
@@ -60,6 +118,7 @@ Implement one checkpoint at a time. Do not combine checkpoints without explicit 
 - Use organization-scoped memberships and roles.
 - In Phase 1, profile access is self-only. Do not expose an organization member directory.
 - Use `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for Supabase.
+- Use `APP_URL` only on the server for authentication email redirects.
 - Keep `N8N_OPSRUNNER_WEBHOOK_URL` server-side.
 - Do not add a Supabase secret key or service-role key.
 - Preserve the current task types, `/api/run-task`, n8n contract, fallback handling, and deterministic output behavior.
@@ -95,6 +154,7 @@ The UI should feel like a real product, not a tutorial, not a template, and not 
 - Store webhook URLs in environment variables.
 - Never create users from the public magic-link login flow.
 - Never expose Supabase secret or service-role credentials.
+- Do not expose `APP_URL` through a `NEXT_PUBLIC_` variable.
 - Enforce organization isolation with RLS and verified active memberships.
 - Do not commit .env.local.
 - Add .env.example.
