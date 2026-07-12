@@ -58,8 +58,33 @@ The roles are `owner`, `admin`, `operator`, and `viewer`. Membership status is
 `invited`, `active`, or `suspended`. RLS denies anonymous table access and
 isolates organization reads through active memberships.
 
-Phase 1C added authentication and session refresh. Phase 1D adds the
-organization-aware shell and protects task execution with active memberships.
+Phase 1C added authentication and session refresh. Phase 1D added the
+organization-aware shell and protected task execution with active memberships.
+
+Phase 2A adds the persistent operational-request database foundation. It is a
+database-only checkpoint and does not add request pages or change the current
+task runner.
+
+## Operational Requests
+
+The Phase 2A schema adds:
+
+- `requests`: organization-scoped operational requests with constrained type,
+  priority, status, requester, and optional assignee
+- `request_comments`: organization-safe request discussion with derived
+  authorship
+- `request_events`: append-only request creation and lifecycle history
+
+Composite foreign keys prevent request participants, comments, and events from
+referencing records in another organization. Active members can read their
+organization's records. Owners and admins can update all mutable request fields
+and reassign requests. Operators can create requests and update only requests
+where they are the requester or assignee; they cannot reassign an existing
+request. Viewers are read-only.
+
+Request creation and status, priority, or assignee changes create events in the
+same database transaction. Event metadata contains only allowlisted transition
+values and never copies request or comment text.
 
 ## Authentication
 
@@ -180,7 +205,8 @@ The Supabase CLI requires Docker Desktop and Node.js 20 or newer.
 ```bash
 npx supabase start
 npx supabase db reset
-npx supabase test db
+npx supabase test db --local
+npx supabase db lint --local --level warning
 ```
 
 `db reset` applies every migration and then runs `supabase/seed.sql`. The seed
@@ -225,8 +251,8 @@ intended non-production or production environment.
 
 ## Database Types
 
-`lib/supabase/database.types.ts` matches the Phase 1B public schema. Regenerate
-it after applying migrations locally:
+Regenerate `lib/supabase/database.types.ts` only after applying and validating
+all migrations locally:
 
 ```bash
 npx supabase gen types typescript --local --schema public > lib/supabase/database.types.ts
@@ -234,6 +260,14 @@ npx supabase gen types typescript --local --schema public > lib/supabase/databas
 
 On Windows PowerShell, use `Out-File -Encoding utf8` instead of `>` if the shell
 writes redirected output with the wrong encoding.
+
+For a linked hosted project, apply the migration and then generate from the
+same project:
+
+```bash
+npx supabase db push
+npx supabase gen types typescript --linked --schema public > lib/supabase/database.types.ts
+```
 
 ## Testing
 
@@ -249,8 +283,9 @@ Run the database checks while the local Supabase stack is running:
 
 ```bash
 npx supabase db reset
-npx supabase test db
+npx supabase test db --local
 npx supabase db lint --local --level warning
+npx supabase gen types typescript --local --schema public
 ```
 
 For a manual workflow check:
@@ -288,9 +323,15 @@ configuration.
 - Do not prefix either n8n variable with `NEXT_PUBLIC_`.
 - No Supabase secret or service-role key is used by the application.
 - `APP_URL` remains server-only and is never prefixed with `NEXT_PUBLIC_`.
-- Anonymous users have no grants on the Phase 1B application tables.
+- Anonymous users have no grants on application tables.
 - Organization authorization comes from current membership rows, not user
   metadata or JWT role claims.
+- Operational records use organization-aware foreign keys as an additional
+  tenant boundary beneath RLS.
+- Requester, comment-author, and event-actor identities come from `auth.uid()`;
+  browser-supplied identity fields are not accepted.
+- Request events are append-only for normal authenticated clients and contain
+  only allowlisted lifecycle metadata.
 - Organization routes and task execution verify identity with `getClaims()` and
   recheck active membership through RLS.
 - Browser-supplied user IDs, organization IDs, and roles are ignored.
@@ -324,5 +365,5 @@ Fallback responses remain successful when `ok` is `true`. The interface treats
 
 ## Deferred Modules
 
-Requests, tasks, clients, approvals, audit history, workflow-run storage,
-analytics, and AI integrations remain outside Phase 1D.
+Request UI, tasks, clients, approvals, workflow-run storage, attachments,
+notifications, analytics, and AI integrations remain outside Phase 2A.

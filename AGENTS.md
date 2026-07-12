@@ -128,6 +128,32 @@ Avoid:
 - Return the same not-found behavior for unknown, inactive, and
   cross-organization route access so organization existence is not disclosed.
 
+### Phase 2A - Operational Request Foundation
+- Add only `requests`, `request_comments`, and `request_events`.
+- Keep this checkpoint database-only apart from generated types and tests.
+- Preserve the current runner, routes, navigation, API contract, and n8n workflow.
+- Enforce organization consistency with composite foreign keys and RLS.
+- Keep request and comment identity fields client-immutable.
+- Keep request events append-only for normal authenticated clients.
+- Record only allowlisted request lifecycle values in event metadata.
+- Do not add request UI, tasks, clients, approvals, workflow runs, attachments,
+  notifications, AI, or new dependencies.
+
+## Phase 2A Request Permissions
+
+- Owners and admins may update all mutable request business fields and may
+  assign or reassign requests.
+- Operators may create requests and update requests only when they are the
+  requester or assignee.
+- Operator requesters may update content, type, priority, status, and due date.
+- Operator assignees may update priority, status, and due date.
+- Operators may not reassign existing requests.
+- Owners and admins may edit comments in their organization.
+- Operators may add comments and edit only their own comments.
+- Viewers have read-only access to requests, comments, and events.
+- Normal authenticated clients may not delete requests or comments or mutate
+  request events directly.
+
 ## Architecture Decisions
 
 - Use organization-scoped memberships and roles.
