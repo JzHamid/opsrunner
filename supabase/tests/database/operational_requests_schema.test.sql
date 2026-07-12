@@ -129,93 +129,90 @@ select ok(
 
 select results_eq(
   $$
-    select constraint_name::text
-    from information_schema.table_constraints
-    where table_schema = 'public'
-      and table_name = 'requests'
-      and constraint_type = 'CHECK'
-    order by constraint_name
+    select conname::text collate "C"
+    from pg_constraint
+    where conrelid = 'public.requests'::regclass
+      and contype = 'c'
+    order by conname::text collate "C"
   $$,
   $$values
-    ('requests_description_check'::text),
-    ('requests_priority_check'::text),
-    ('requests_request_type_check'::text),
-    ('requests_status_check'::text),
-    ('requests_title_check'::text)
+    ('requests_description_check'::text collate "C"),
+    ('requests_priority_check'::text collate "C"),
+    ('requests_request_type_check'::text collate "C"),
+    ('requests_status_check'::text collate "C"),
+    ('requests_title_check'::text collate "C")
   $$,
   'requests has the approved check constraints'
 );
 select results_eq(
   $$
-    select constraint_name::text
-    from information_schema.table_constraints
-    where table_schema = 'public'
-      and table_name = 'request_comments'
-      and constraint_type = 'CHECK'
-    order by constraint_name
+    select conname::text collate "C"
+    from pg_constraint
+    where conrelid = 'public.request_comments'::regclass
+      and contype = 'c'
+    order by conname::text collate "C"
   $$,
-  $$values ('request_comments_body_check'::text)$$,
+  $$values ('request_comments_body_check'::text collate "C")$$,
   'request comments has the approved body constraint'
 );
 select results_eq(
   $$
-    select constraint_name::text
-    from information_schema.table_constraints
-    where table_schema = 'public'
-      and table_name = 'request_events'
-      and constraint_type = 'CHECK'
-    order by constraint_name
+    select conname::text collate "C"
+    from pg_constraint
+    where conrelid = 'public.request_events'::regclass
+      and contype = 'c'
+    order by conname::text collate "C"
   $$,
   $$values
-    ('request_events_event_type_check'::text),
-    ('request_events_metadata_object_check'::text)
+    ('request_events_event_type_check'::text collate "C"),
+    ('request_events_metadata_object_check'::text collate "C")
   $$,
   'request events has the approved check constraints'
 );
 
 select results_eq(
   $$
-    select constraint_name::text
+    select constraint_name::text collate "C"
     from information_schema.table_constraints
     where table_schema = 'public'
       and table_name = 'requests'
       and constraint_type = 'FOREIGN KEY'
-    order by constraint_name
+    order by constraint_name collate "C"
   $$,
   $$values
-    ('requests_organization_assignee_fkey'::text),
-    ('requests_organization_id_fkey'::text),
-    ('requests_organization_requester_fkey'::text)
+    ('requests_organization_assignee_fkey'::text collate "C"),
+    ('requests_organization_id_fkey'::text collate "C"),
+    ('requests_organization_requester_fkey'::text collate "C")
   $$,
   'requests has only the approved foreign keys'
 );
 select results_eq(
   $$
-    select constraint_name::text
+    select constraint_name::text collate "C"
     from information_schema.table_constraints
     where table_schema = 'public'
       and table_name = 'request_comments'
       and constraint_type = 'FOREIGN KEY'
-    order by constraint_name
+    order by constraint_name collate "C"
   $$,
   $$values
-    ('request_comments_organization_author_fkey'::text),
-    ('request_comments_organization_request_fkey'::text)
+    ('request_comments_organization_author_fkey'::text collate "C"),
+    ('request_comments_organization_request_fkey'::text collate "C")
   $$,
   'request comments has only the approved foreign keys'
 );
 select results_eq(
   $$
-    select constraint_name::text
+    select constraint_name::text collate "C"
     from information_schema.table_constraints
     where table_schema = 'public'
       and table_name = 'request_events'
       and constraint_type = 'FOREIGN KEY'
-    order by constraint_name
+    order by constraint_name collate "C"
   $$,
   $$values
-    ('request_events_organization_actor_fkey'::text),
-    ('request_events_organization_request_fkey'::text)
+    ('request_events_organization_actor_fkey'::text collate "C"),
+    ('request_events_organization_request_fkey'::text collate "C")
   $$,
   'request events has only the approved foreign keys'
 );
@@ -371,8 +368,8 @@ select results_eq(
 select results_eq(
   $$
     select
-      privilege_type::text,
-      string_agg(column_name::text, ',' order by ordinal_position)
+      privilege_type::text collate "C",
+      string_agg(column_name::text, ',' order by ordinal_position) collate "C"
     from information_schema.column_privileges
     join information_schema.columns
       using (table_schema, table_name, column_name)
@@ -380,20 +377,20 @@ select results_eq(
       and table_schema = 'public'
       and table_name = 'requests'
     group by privilege_type
-    order by privilege_type
+    order by privilege_type::text collate "C"
   $$,
   $$values
-    ('INSERT'::text, 'organization_id,title,description,request_type,priority,status,assignee_id,due_at'::text),
-    ('SELECT'::text, 'id,organization_id,title,description,request_type,priority,status,requester_id,assignee_id,due_at,created_at,updated_at'::text),
-    ('UPDATE'::text, 'title,description,request_type,priority,status,assignee_id,due_at'::text)
+    ('INSERT'::text collate "C", 'organization_id,title,description,request_type,priority,status,assignee_id,due_at'::text collate "C"),
+    ('SELECT'::text collate "C", 'id,organization_id,title,description,request_type,priority,status,requester_id,assignee_id,due_at,created_at,updated_at'::text collate "C"),
+    ('UPDATE'::text collate "C", 'title,description,request_type,priority,status,assignee_id,due_at'::text collate "C")
   $$,
   'authenticated request privileges are limited to approved columns'
 );
 select results_eq(
   $$
     select
-      privilege_type::text,
-      string_agg(column_name::text, ',' order by ordinal_position)
+      privilege_type::text collate "C",
+      string_agg(column_name::text, ',' order by ordinal_position) collate "C"
     from information_schema.column_privileges
     join information_schema.columns
       using (table_schema, table_name, column_name)
@@ -401,20 +398,20 @@ select results_eq(
       and table_schema = 'public'
       and table_name = 'request_comments'
     group by privilege_type
-    order by privilege_type
+    order by privilege_type::text collate "C"
   $$,
   $$values
-    ('INSERT'::text, 'organization_id,request_id,body'::text),
-    ('SELECT'::text, 'id,organization_id,request_id,author_id,body,created_at,updated_at'::text),
-    ('UPDATE'::text, 'body'::text)
+    ('INSERT'::text collate "C", 'organization_id,request_id,body'::text collate "C"),
+    ('SELECT'::text collate "C", 'id,organization_id,request_id,author_id,body,created_at,updated_at'::text collate "C"),
+    ('UPDATE'::text collate "C", 'body'::text collate "C")
   $$,
   'authenticated request comment privileges are limited to approved columns'
 );
 select results_eq(
   $$
     select
-      privilege_type::text,
-      string_agg(column_name::text, ',' order by ordinal_position)
+      privilege_type::text collate "C",
+      string_agg(column_name::text, ',' order by ordinal_position) collate "C"
     from information_schema.column_privileges
     join information_schema.columns
       using (table_schema, table_name, column_name)
@@ -422,10 +419,10 @@ select results_eq(
       and table_schema = 'public'
       and table_name = 'request_events'
     group by privilege_type
-    order by privilege_type
+    order by privilege_type::text collate "C"
   $$,
   $$values
-    ('SELECT'::text, 'id,organization_id,request_id,actor_id,event_type,metadata,created_at'::text)
+    ('SELECT'::text collate "C", 'id,organization_id,request_id,actor_id,event_type,metadata,created_at'::text collate "C")
   $$,
   'authenticated request event privileges are read-only'
 );
@@ -490,7 +487,7 @@ values (
   '52000000-0000-0000-0000-000000000001',
   'Valid request',
   'Valid request description.',
-  '51000000-0000-0000-000000000001'
+  '51000000-0000-0000-0000-000000000001'
 );
 
 select throws_ok(

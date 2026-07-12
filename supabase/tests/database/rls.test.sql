@@ -99,19 +99,22 @@ select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
 set local role anon;
 
-select results_eq(
+select throws_ok(
   'select count(*) from public.profiles',
-  array[0::bigint],
+  '42501',
+  null,
   'anonymous users cannot read profiles'
 );
-select results_eq(
+select throws_ok(
   'select count(*) from public.organizations',
-  array[0::bigint],
+  '42501',
+  null,
   'anonymous users cannot read organizations'
 );
-select results_eq(
+select throws_ok(
   'select count(*) from public.organization_memberships',
-  array[0::bigint],
+  '42501',
+  null,
   'anonymous users cannot read memberships'
 );
 
