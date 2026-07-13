@@ -7,6 +7,11 @@
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
       organization_memberships: {
@@ -260,6 +265,14 @@ export type Database = {
       create_organization: {
         Args: { organization_name: string; organization_slug: string }
         Returns: string
+      }
+      get_organization_member_labels: {
+        Args: { target_organization_id: string }
+        Returns: {
+          display_name: string
+          role: string
+          user_id: string
+        }[]
       }
     }
     Enums: {

@@ -139,6 +139,20 @@ Avoid:
 - Do not add request UI, tasks, clients, approvals, workflow runs, attachments,
   notifications, AI, or new dependencies.
 
+### Phase 2B - Requests Workspace
+- Add the organization-scoped request list, creation, and detail routes.
+- Make Requests the default authenticated organization destination.
+- Keep the application shell limited to Requests, Run, and Sign out.
+- Load and mutate requests only through the authenticated, request-scoped
+  Supabase client with explicit trusted organization filters in addition to RLS.
+- Reauthorize the exact organization and request in every Server Action.
+- Use only the narrow `get_organization_member_labels(uuid)` function for
+  assignable display labels; do not expose profile rows, emails, viewers, or
+  inactive memberships.
+- Keep request activity human-readable and never render raw event JSON.
+- Do not add search, pagination, realtime, comment editing, attachments,
+  notifications, request automation, or future modules in this checkpoint.
+
 ## Phase 2A Request Permissions
 
 - Owners and admins may update all mutable request business fields and may
@@ -157,7 +171,8 @@ Avoid:
 ## Architecture Decisions
 
 - Use organization-scoped memberships and roles.
-- In Phase 1, profile access is self-only. Do not expose an organization member directory.
+- Profile access remains self-only. Phase 2B permits only the narrow assignable
+  member-label function; it is not a general organization member directory.
 - Use `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for Supabase.
 - Use `APP_URL` only on the server for authentication email redirects.
 - Keep `N8N_OPSRUNNER_WEBHOOK_URL` server-side.

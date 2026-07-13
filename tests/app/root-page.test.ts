@@ -40,7 +40,7 @@ describe("root organization resolution", () => {
     await expect(HomePage()).rejects.toThrow("redirect:/no-access");
   });
 
-  it("redirects an active member to the first organization runner", async () => {
+  it("redirects an active member to the first organization requests workspace", async () => {
     getFirstMembershipMock.mockResolvedValue({
       kind: "active-member",
       context: {
@@ -49,7 +49,7 @@ describe("root organization resolution", () => {
     });
 
     await expect(HomePage()).rejects.toThrow(
-      "redirect:/org/ops%20workspace/run",
+      "redirect:/org/ops%20workspace/requests",
     );
   });
 });

@@ -2,9 +2,10 @@
 
 ## Product Overview
 
-OpsRunner is an internal task runner for executing approved business workflows
-through n8n. It lets a user choose a task type, provide context, run the
-workflow, and review a structured result from one focused interface.
+OpsRunner is an internal operations workspace for managing operational requests
+and executing approved business workflows through n8n. It keeps requests,
+discussion, lifecycle history, and focused workflow execution inside the
+current organization boundary.
 
 ## What OpsRunner Does
 
@@ -18,6 +19,10 @@ OpsRunner currently supports four approved tasks:
 Each request is validated, authorized against the current organization, and
 routed by an approved task type. Technical response data stays hidden under
 `Details` in the interface.
+
+The Requests workspace also lets active members review operational work,
+capture new requests, update approved fields, comment, and read a concise audit
+history according to their organization role.
 
 ## Core Workflow
 
@@ -61,9 +66,9 @@ isolates organization reads through active memberships.
 Phase 1C added authentication and session refresh. Phase 1D added the
 organization-aware shell and protected task execution with active memberships.
 
-Phase 2A adds the persistent operational-request database foundation. It is a
-database-only checkpoint and does not add request pages or change the current
-task runner.
+Phase 2A added the persistent operational-request database foundation. Phase 2B
+adds its organization-scoped interface without changing the task runner or n8n
+contract.
 
 ## Operational Requests
 
@@ -86,6 +91,19 @@ Request creation and status, priority, or assignee changes create events in the
 same database transaction. Event metadata contains only allowlisted transition
 values and never copies request or comment text.
 
+Phase 2B adds:
+
+- a request list with status and priority filters, capped at 100 rows
+- a focused creation form for owners, admins, and operators
+- a request detail view with comments and readable lifecycle activity
+- role-aware status, priority, due-date, and assignment controls
+- `get_organization_member_labels(uuid)`, a narrow authenticated function that
+  returns only active owner, admin, and operator display labels
+
+The label function does not expose emails, membership status, timestamps,
+viewers, inactive members, or unrestricted profile access. Blank profile names
+use the neutral label `Unnamed member`.
+
 ## Authentication
 
 OpsRunner uses invite-only magic-link authentication. The public login form
@@ -95,7 +113,7 @@ Page access is handled through a Supabase SSR proxy:
 
 - Unauthenticated users are sent to `/login`.
 - Active organization members are routed from `/` to
-  `/org/[organizationSlug]/run`.
+  `/org/[organizationSlug]/requests`.
 - Authenticated users without an active membership are sent to `/no-access`.
 - Organization routes and `/api/run-task` reauthorize access server-side; proxy
   redirects are not the only authorization boundary.
@@ -103,6 +121,10 @@ Page access is handled through a Supabase SSR proxy:
 ## Route Structure
 
 - `/`: resolves the signed-in user's first active organization.
+- `/org/[organizationSlug]/requests`: protected request list and filters.
+- `/org/[organizationSlug]/requests/new`: protected request creation.
+- `/org/[organizationSlug]/requests/[requestId]`: protected request detail,
+  comments, updates, and activity.
 - `/org/[organizationSlug]/run`: protected task runner and application shell.
 - `/login`: invite-only magic-link login.
 - `/no-access`: authenticated state for users without an active membership.
@@ -110,6 +132,21 @@ Page access is handled through a Supabase SSR proxy:
 
 Unknown, inactive, and cross-organization route access returns the same
 not-found behavior so organization existence is not disclosed.
+
+## Request Roles
+
+- Owners and admins can create requests, update status, priority, due date, and
+  assignment, and add comments.
+- Operators can create and comment. Operators who are the requester or assignee
+  can update status, priority, and due date, but cannot reassign requests.
+- Unrelated operators can comment but cannot update request fields.
+- Viewers can read requests, comments, and activity but receive no mutation
+  controls.
+
+Interface checks improve usability. Every mutation independently rechecks the
+verified user, exact active organization membership, trusted organization ID,
+and request before RLS and database guards make the final authorization
+decision. Requester and comment author identities are database-derived.
 
 ## n8n Workflow Contract
 
@@ -196,7 +233,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) and sign in with an invited
 account that has an active organization membership. OpsRunner redirects to that
-organization's runner, where you can select a task and choose `Run task`.
+organization's Requests workspace. Use `Run` in the compact workspace
+navigation to open the existing task runner.
 
 ## Local Supabase Setup
 
@@ -212,6 +250,9 @@ npx supabase db lint --local --level warning
 `db reset` applies every migration and then runs `supabase/seed.sql`. The seed
 file intentionally inserts no users or organization data. Database tests create
 disposable users inside transactions and roll them back.
+
+Phase 2B adds the versioned member-label migration. Apply and validate all
+migrations locally before regenerating database types.
 
 To apply migrations to a Supabase project:
 
@@ -291,14 +332,21 @@ npx supabase gen types typescript --local --schema public
 For a manual workflow check:
 
 1. Confirm an unauthenticated visit to `/` redirects to `/login`.
-2. Confirm an active member reaches `/org/[organizationSlug]/run`.
+2. Confirm an active member reaches `/org/[organizationSlug]/requests`.
 3. Confirm another organization's slug returns the same not-found state as an
    unknown slug.
-4. Run each of the four approved task types.
-5. Confirm the result has a title, body, next steps, status, and processed time.
-6. Open `Details` and verify the raw response is valid JSON.
-7. Confirm fallback responses show `Safe fallback` rather than an error.
-8. Remove `N8N_OPSRUNNER_WEBHOOK_SECRET` locally and confirm the request fails
+4. Create a request as an owner, admin, or operator and confirm it redirects to
+   the new detail page.
+5. Confirm a viewer has no creation, update, or comment controls.
+6. Confirm participant operators can update execution fields but cannot change
+   assignment, while unrelated operators can only comment.
+7. Check status and priority filters, empty states, readable dates, comments,
+   and activity messages on desktop and mobile widths.
+8. Open the `Run` route and run each of the four approved task types.
+9. Confirm the result has a title, body, next steps, status, and processed time.
+10. Open `Details` and verify the raw response is valid JSON.
+11. Confirm fallback responses show `Safe fallback` rather than an error.
+12. Remove `N8N_OPSRUNNER_WEBHOOK_SECRET` locally and confirm the request fails
    safely without calling n8n.
 
 ## Deployment Notes
@@ -328,6 +376,10 @@ configuration.
   metadata or JWT role claims.
 - Operational records use organization-aware foreign keys as an additional
   tenant boundary beneath RLS.
+- Request pages and Server Actions apply explicit trusted organization filters
+  even though RLS remains enabled.
+- Assignable names come only from the narrow member-label function; the
+  self-only profile policy remains unchanged.
 - Requester, comment-author, and event-actor identities come from `auth.uid()`;
   browser-supplied identity fields are not accepted.
 - Request events are append-only for normal authenticated clients and contain
@@ -365,5 +417,6 @@ Fallback responses remain successful when `ok` is `true`. The interface treats
 
 ## Deferred Modules
 
-Request UI, tasks, clients, approvals, workflow-run storage, attachments,
-notifications, analytics, and AI integrations remain outside Phase 2A.
+Tasks, clients, approvals, workflow-run storage, attachments, notifications,
+search, pagination, realtime updates, comment editing, request-to-automation
+execution, analytics, and AI integrations remain outside Phase 2B.

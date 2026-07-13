@@ -17,6 +17,6 @@ export default async function HomePage() {
   }
 
   redirect(
-    `/org/${encodeURIComponent(membership.context.organization.slug)}/run`,
+    `/org/${encodeURIComponent(membership.context.organization.slug)}/requests`,
   );
 }

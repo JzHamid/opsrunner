@@ -40,7 +40,7 @@ export function getAuthRedirect(pathname: string, access: AuthAccess) {
 
   if (access.kind === "active-member") {
     return pathname === "/login" || pathname === "/no-access"
-      ? `/org/${encodeURIComponent(access.organizationSlug)}/run`
+      ? `/org/${encodeURIComponent(access.organizationSlug)}/requests`
       : null;
   }
 
